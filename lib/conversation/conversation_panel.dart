@@ -5,17 +5,20 @@ import 'package:flutter/services.dart';
 import 'package:flutter_thinking_orbs/flutter_thinking_orbs.dart';
 
 import '../ui/theme.dart';
+import '../vision/cutout.dart';
 import '../voice/voice.dart';
 import 'conversation.dart';
 
-/// Bottom sheet under the hovering object. Compact by default (who it is, the
-/// latest exchange, the input); tap the handle for the whole transcript.
+/// Chat sheet under the hovering object: a header with who it is, the thread
+/// as bubbles, and a composer. Tap or drag the handle to give the thread more
+/// room.
 class ConversationPanel extends StatefulWidget {
   const ConversationPanel({
     super.key,
     required this.conversation,
     required this.speaking,
     required this.topFraction,
+    this.avatar,
   });
 
   final Conversation conversation;
@@ -24,6 +27,9 @@ class ConversationPanel extends StatefulWidget {
   /// The compact panel never rises above this fraction of the screen height,
   /// so the object above it stays in view.
   final double topFraction;
+
+  /// The object's own cutout, shown beside its messages.
+  final Cutout? avatar;
 
   @override
   State<ConversationPanel> createState() => _ConversationPanelState();
@@ -60,10 +66,11 @@ class _ConversationPanelState extends State<ConversationPanel> {
 
   void _send([String? text]) {
     final value = text ?? _input.text;
-    if (value.trim().isEmpty) return;
+    // While a reply is still arriving the draft stays in the field.
+    if (value.trim().isEmpty || _c.isStreaming) return;
     HapticFeedback.selectionClick();
     _c.send(value);
-    _input.clear();
+    if (text == null) _input.clear();
   }
 
   Future<void> _toggleMic() async {
@@ -108,7 +115,7 @@ class _ConversationPanelState extends State<ConversationPanel> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
               ),
               child: Padding(
-                padding: EdgeInsets.fromLTRB(20, 0, 20, 12 + (keyboard > 0 ? 0 : mq.padding.bottom)),
+                padding: EdgeInsets.fromLTRB(0, 0, 0, 10 + (keyboard > 0 ? 0 : mq.padding.bottom)),
                 child: ListenableBuilder(
                   listenable: _c,
                   builder: (context, _) => Column(
@@ -116,22 +123,25 @@ class _ConversationPanelState extends State<ConversationPanel> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _Handle(expanded: _expanded, onTap: () => setState(() => _expanded = !_expanded)),
-                      _Header(conversation: _c, speaking: widget.speaking, accent: accent),
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: _expanded
-                            ? _Transcript(messages: _c.messages)
-                            : _Latest(messages: _c.messages),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: _Header(conversation: _c, speaking: widget.speaking, accent: accent, avatar: widget.avatar),
                       ),
-                      const SizedBox(height: 12),
-                      _InputRow(
-                        controller: _input,
-                        speech: _speech,
-                        accent: accent,
-                        hint: 'Ask ${_c.persona.characterName} something…',
-                        enabled: !_c.isStreaming,
-                        onSend: _send,
-                        onMic: _toggleMic,
+                      const SizedBox(height: 10),
+                      Flexible(
+                        child: _Thread(messages: _c.messages, accent: accent, avatar: widget.avatar),
+                      ),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: _Composer(
+                          controller: _input,
+                          speech: _speech,
+                          hint: 'Message ${_c.persona.characterName}',
+                          canSend: !_c.isStreaming,
+                          onSend: _send,
+                          onMic: _toggleMic,
+                        ),
                       ),
                     ],
                   ),
@@ -163,7 +173,7 @@ class _Handle extends StatelessWidget {
           if ((v < -200 && !expanded) || (v > 200 && expanded)) onTap();
         },
         child: SizedBox(
-          height: 26,
+          height: 22,
           child: Center(
             child: Container(
               width: 38,
@@ -177,139 +187,207 @@ class _Handle extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header({required this.conversation, required this.speaking, required this.accent});
-  final Conversation conversation;
-  final ValueNotifier<bool> speaking;
+/// The object's face for the thread: its own cutout, bare (no disc behind a
+/// masked cutout), or the photo crop in a circle when there is no mask.
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.cutout, required this.size, required this.accent});
+  final Cutout? cutout;
+  final double size;
   final Color accent;
 
   @override
   Widget build(BuildContext context) {
+    final c = cutout;
+    final Widget face;
+    if (c == null) {
+      face = Icon(Icons.blur_on_rounded, size: size * 0.8, color: accent);
+    } else if (c.masked) {
+      face = Image.memory(c.png, fit: BoxFit.contain, gaplessPlayback: true, filterQuality: FilterQuality.medium);
+    } else {
+      face = ClipOval(child: Image.memory(c.png, fit: BoxFit.cover, gaplessPlayback: true));
+    }
+    return ExcludeSemantics(child: SizedBox.square(dimension: size, child: Center(child: face)));
+  }
+}
+
+class _Header extends StatelessWidget {
+  const _Header({required this.conversation, required this.speaking, required this.accent, required this.avatar});
+  final Conversation conversation;
+  final ValueNotifier<bool> speaking;
+  final Color accent;
+  final Cutout? avatar;
+
+  @override
+  Widget build(BuildContext context) {
     final p = conversation.persona;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                p.characterName,
+        _Avatar(cutout: avatar, size: 40, accent: accent),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      p.characterName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontFamily: voiceFont, fontSize: 24, height: 1.15, color: Palette.bone),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  _SpeakingBars(speaking: speaking, color: accent),
+                ],
+              ),
+              Text(
+                conversation.isStreaming ? 'thinking…' : p.identifiedAs,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontFamily: voiceFont, fontSize: 30, height: 1.15, color: Palette.bone),
+                style: TextStyle(fontSize: 13, height: 1.3, color: accent),
               ),
-            ),
-            const SizedBox(width: 12),
-            _SpeakingBars(speaking: speaking, color: accent),
-          ],
-        ),
-        const SizedBox(height: 2),
-        Text(
-          p.identifiedAs,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 14, height: 1.3, color: accent),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-/// Compact view: the newest line from the object, with the question that
-/// prompted it above, scrollable if long.
-class _Latest extends StatelessWidget {
-  const _Latest({required this.messages});
+/// The whole thread, newest at the bottom. Consecutive messages from one side
+/// group together; the last of a group gets the tail corner (and, for the
+/// object, its avatar).
+class _Thread extends StatelessWidget {
+  const _Thread({required this.messages, required this.accent, required this.avatar});
   final List<Message> messages;
+  final Color accent;
+  final Cutout? avatar;
 
   @override
   Widget build(BuildContext context) {
-    final last = messages.last;
-    final question = messages.length >= 2 && messages[messages.length - 2].fromUser ? messages[messages.length - 2] : null;
-    return SingleChildScrollView(
-      reverse: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (question != null) ...[_UserLine(text: question.text), const SizedBox(height: 12)],
-          if (last.fromUser) _UserLine(text: last.text) else _ObjectLine(message: last),
-        ],
-      ),
-    );
-  }
-}
-
-class _Transcript extends StatelessWidget {
-  const _Transcript({required this.messages});
-  final List<Message> messages;
-
-  @override
-  Widget build(BuildContext context) {
-    // Reversed so the newest line stays pinned to the bottom as it streams.
+    // Reversed so the newest message stays pinned to the bottom as it streams.
     return ListView.builder(
       reverse: true,
       shrinkWrap: true,
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       itemCount: messages.length,
       itemBuilder: (context, i) {
-        final m = messages[messages.length - 1 - i];
+        final index = messages.length - 1 - i;
+        final m = messages[index];
+        final next = index + 1 < messages.length ? messages[index + 1] : null;
+        final previous = index > 0 ? messages[index - 1] : null;
+        final lastOfGroup = next == null || next.fromUser != m.fromUser;
+        final firstOfGroup = previous == null || previous.fromUser != m.fromUser;
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          child: m.fromUser ? _UserLine(text: m.text) : _ObjectLine(message: m),
+          padding: EdgeInsets.only(top: firstOfGroup ? 10 : 3),
+          child: m.fromUser
+              ? _UserBubble(text: m.text, tail: lastOfGroup, accent: accent)
+              : _ObjectBubble(message: m, tail: lastOfGroup, accent: accent, avatar: avatar),
         );
       },
     );
   }
 }
 
-class _ObjectLine extends StatelessWidget {
-  const _ObjectLine({required this.message});
+const _bubbleRadius = Radius.circular(20);
+const _tailRadius = Radius.circular(6);
+const _avatarSize = 28.0;
+
+double _bubbleMaxWidth(BuildContext context) => MediaQuery.sizeOf(context).width * 0.76;
+
+class _ObjectBubble extends StatelessWidget {
+  const _ObjectBubble({required this.message, required this.tail, required this.accent, required this.avatar});
   final Message message;
+  final bool tail;
+  final Color accent;
+  final Cutout? avatar;
 
   @override
   Widget build(BuildContext context) {
     final waiting = message.streaming && message.text.trim().isEmpty;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final lost = message.failed && message.text.trim().isEmpty;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        if (waiting)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: ThinkingOrb(state: OrbState.composing, size: 28, theme: OrbTheme.dark, semanticLabel: 'Thinking'),
-          )
-        else
-          Text(
-            message.text,
-            style: const TextStyle(fontFamily: voiceFont, fontSize: 21, height: 1.36, color: Palette.bone),
+        // Every object bubble keeps the avatar's slot so the column stays aligned.
+        tail ? _Avatar(cutout: avatar, size: _avatarSize, accent: accent) : const SizedBox(width: _avatarSize),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: _bubbleMaxWidth(context)),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Palette.inkRaised,
+                    borderRadius: BorderRadius.only(
+                      topLeft: _bubbleRadius,
+                      topRight: _bubbleRadius,
+                      bottomRight: _bubbleRadius,
+                      bottomLeft: tail ? _tailRadius : _bubbleRadius,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: waiting
+                        ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
+                        : const EdgeInsets.fromLTRB(14, 9, 14, 10),
+                    child: waiting
+                        ? const ThinkingOrb(state: OrbState.composing, size: 24, theme: OrbTheme.dark, semanticLabel: 'Thinking')
+                        : Text(
+                            lost ? 'I lost my words. Ask me again?' : message.text,
+                            style: TextStyle(
+                              fontFamily: voiceFont,
+                              fontSize: 18,
+                              height: 1.34,
+                              color: lost ? Palette.muted : Palette.bone,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              if (message.failed && !lost)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 4, 0, 0),
+                  child: Text('The connection dropped mid-sentence.', style: TextStyle(fontSize: 12, color: Palette.warn)),
+                ),
+            ],
           ),
-        if (message.failed)
-          Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(
-              message.text.isEmpty ? 'I lost my words. Ask me again?' : 'The connection dropped mid-sentence.',
-              style: const TextStyle(fontSize: 13, color: Palette.warn),
-            ),
-          ),
+        ),
       ],
     );
   }
 }
 
-class _UserLine extends StatelessWidget {
-  const _UserLine({required this.text});
+class _UserBubble extends StatelessWidget {
+  const _UserBubble({required this.text, required this.tail, required this.accent});
   final String text;
+  final bool tail;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.72),
+        constraints: BoxConstraints(maxWidth: _bubbleMaxWidth(context)),
         child: DecoratedBox(
-          decoration: BoxDecoration(color: Palette.inkRaised, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            // A quiet tint of the object's colour, not the colour itself.
+            color: Color.alphaBlend(accent.withValues(alpha: 0.24), Palette.inkRaised),
+            borderRadius: BorderRadius.only(
+              topLeft: _bubbleRadius,
+              topRight: _bubbleRadius,
+              bottomLeft: _bubbleRadius,
+              bottomRight: tail ? _tailRadius : _bubbleRadius,
+            ),
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            child: Text(text, style: const TextStyle(fontSize: 15, height: 1.4, color: Palette.bone)),
+            padding: const EdgeInsets.fromLTRB(14, 9, 14, 10),
+            child: Text(text, style: const TextStyle(fontSize: 16, height: 1.38, color: Palette.bone)),
           ),
         ),
       ),
@@ -317,22 +395,22 @@ class _UserLine extends StatelessWidget {
   }
 }
 
-class _InputRow extends StatelessWidget {
-  const _InputRow({
+/// Message field with one round action beside it: the mic while the field is
+/// empty, send once there is text, stop while listening.
+class _Composer extends StatelessWidget {
+  const _Composer({
     required this.controller,
     required this.speech,
-    required this.accent,
     required this.hint,
-    required this.enabled,
+    required this.canSend,
     required this.onSend,
     required this.onMic,
   });
 
   final TextEditingController controller;
   final SpeechInput speech;
-  final Color accent;
   final String hint;
-  final bool enabled;
+  final bool canSend;
   final void Function([String?]) onSend;
   final VoidCallback onMic;
 
@@ -340,82 +418,98 @@ class _InputRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: speech.listening,
-      builder: (context, listening, _) => Row(
-        children: [
-          Semantics(
-            button: true,
-            label: listening ? 'Stop listening' : 'Talk',
-            child: Material(
-              color: listening ? accent : Palette.inkRaised,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: enabled ? onMic : null,
-                child: SizedBox.square(
-                  dimension: 50,
-                  child: Icon(
-                    listening ? Icons.stop_rounded : Icons.mic_rounded,
-                    color: listening ? Palette.ink : Palette.bone,
-                    size: 23,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: listening
-                // Live transcript in place of the field while the mic is open.
-                ? ValueListenableBuilder<String>(
-                    valueListenable: speech.transcript,
-                    builder: (context, heard, _) => Container(
-                      constraints: const BoxConstraints(minHeight: 50),
-                      alignment: Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(color: Palette.inkRaised, borderRadius: BorderRadius.circular(16)),
-                      child: Row(
-                        children: [
-                          const ThinkingOrb(state: OrbState.listening, size: 22, theme: OrbTheme.dark),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              heard.isEmpty ? 'Listening…' : heard,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 16, color: heard.isEmpty ? Palette.muted : Palette.bone),
+      builder: (context, listening, _) => ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (context, value, _) {
+          final hasText = value.text.trim().isNotEmpty;
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 46),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(color: Palette.inkRaised, borderRadius: BorderRadius.circular(23)),
+                  child: listening
+                      // Live transcript in place of the field while the mic is open.
+                      ? ValueListenableBuilder<String>(
+                          valueListenable: speech.transcript,
+                          builder: (context, heard, _) => Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 11, 16, 11),
+                            child: Row(
+                              children: [
+                                const ThinkingOrb(state: OrbState.listening, size: 22, theme: OrbTheme.dark),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    heard.isEmpty ? 'Listening…' : heard,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(fontSize: 16, height: 1.3, color: heard.isEmpty ? Palette.muted : Palette.bone),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-                  )
-                : TextField(
-                    controller: controller,
-                    enabled: enabled,
-                    minLines: 1,
-                    maxLines: 3,
-                    textInputAction: TextInputAction.send,
-                    textCapitalization: TextCapitalization.sentences,
-                    onSubmitted: (_) => onSend(),
-                    style: const TextStyle(fontSize: 16, color: Palette.bone),
-                    cursorColor: accent,
-                    decoration: InputDecoration(
-                      hintText: hint,
-                      hintStyle: const TextStyle(color: Palette.muted),
-                      filled: true,
-                      fillColor: Palette.inkRaised,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.fromLTRB(16, 15, 6, 15),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-                      suffixIcon: IconButton(
-                        tooltip: 'Send',
-                        onPressed: enabled ? onSend : null,
-                        icon: Icon(Icons.arrow_upward_rounded, color: enabled ? Palette.bone : Palette.muted),
-                      ),
-                    ),
-                  ),
-          ),
-        ],
+                        )
+                      : TextField(
+                          controller: controller,
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.send,
+                          textCapitalization: TextCapitalization.sentences,
+                          onSubmitted: (_) => onSend(),
+                          style: const TextStyle(fontSize: 16, height: 1.3, color: Palette.bone),
+                          cursorColor: Palette.bone,
+                          decoration: InputDecoration(
+                            hintText: hint,
+                            hintStyle: const TextStyle(color: Palette.muted),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.fromLTRB(18, 13, 18, 13),
+                            border: InputBorder.none,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (listening)
+                _RoundAction(icon: Icons.stop_rounded, label: 'Stop listening', filled: true, onTap: onMic)
+              else if (hasText)
+                _RoundAction(icon: Icons.arrow_upward_rounded, label: 'Send', filled: true, onTap: canSend ? onSend : null)
+              else
+                _RoundAction(icon: Icons.mic_rounded, label: 'Talk', filled: false, onTap: canSend ? onMic : null),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({required this.icon, required this.label, required this.filled, required this.onTap});
+  final IconData icon;
+  final String label;
+  final bool filled;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final fill = filled ? (enabled ? Palette.bone : Palette.inkLine) : Palette.inkRaised;
+    final ink = filled ? (enabled ? Palette.ink : Palette.muted) : (enabled ? Palette.bone : Palette.muted);
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: label,
+      child: Material(
+        color: fill,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox.square(dimension: 46, child: Icon(icon, color: ink, size: 22)),
+        ),
       ),
     );
   }

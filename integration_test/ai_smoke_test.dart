@@ -4,6 +4,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -107,10 +108,11 @@ void main() {
     expect(onTopic.trim(), isNotEmpty);
   }));
 
-  testWidgets('Gemini TTS returns playable speech', (tester) =>
+  testWidgets('Gemini TTS speaks only the line, with cues performed not read', (tester) =>
       _recorded('tts', () async {
+    const line = "<chuckle> Oi, mind the crease. I'm Max, and I've done more miles than you.";
     final clock = Stopwatch()..start();
-    final speech = await synthesize('Oi, mind the crease. I am Max.', persona);
+    final speech = await synthesize(speechText(line), persona);
     final seconds = speech.pcm.lengthInBytes / 2 / speech.sampleRate;
     _log('SMOKE tts: ${speech.pcm.lengthInBytes} bytes @ ${speech.sampleRate} Hz '
         '(${seconds.toStringAsFixed(2)} s audio) in ${clock.elapsedMilliseconds}ms');
@@ -119,5 +121,18 @@ void main() {
     // The envelope that drives the talking motion must be non-trivial.
     final envelope = loudnessEnvelope(speech.pcm, speech.sampleRate);
     expect(envelope.where((v) => v > 0.2), isNotEmpty);
+
+    // Hear it back: a transcript of the audio must be the line and nothing else.
+    final heard = (await FirebaseAI.agentPlatform().generativeModel(model: 'gemini-3.8-flash').generateContent([
+      Content.multi([
+        InlineDataPart('audio/wav', encodeWav(speech.pcm, speech.sampleRate)),
+        TextPart('Transcribe this audio word for word. Output only the words spoken.'),
+      ]),
+    ])).text!.toLowerCase();
+    _log('SMOKE tts heard: $heard');
+    expect(heard, contains('crease'));
+    for (final leaked in ['perform', 'transcript', 'conversational', 'announcer', 'chuckle', 'voice']) {
+      expect(heard, isNot(contains(leaked)), reason: 'instructions or cue read aloud: "$leaked"');
+    }
   }));
 }

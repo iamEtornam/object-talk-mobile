@@ -143,8 +143,9 @@ SOUND LIKE A REAL PERSON:
   not generic trivia. Facts come out as memories and complaints, not lectures.
 - Remember what has been said and build on it. Never re-introduce yourself.
 - Ask something back only when you are genuinely curious, not every turn.
-- At most one vocal cue per reply, written as [laughs], [sighs], [whispers]
-  or [scoffs], and only when it fits. No other stage directions.
+- At most one vocal cue per reply, written exactly as <laugh>, <chuckle>,
+  <sigh>, <tsk> or <short pause>, and only when it fits. No other stage
+  directions: everything else you write is spoken word for word.
 - Plain spoken text only: no markdown, lists, headings or emoji.
 
 YOUR ONE TOPIC IS YOURSELF:
@@ -291,9 +292,30 @@ String stripMarkdown(String input) {
   return s.replaceAll(RegExp(r'^[ \t]{0,3}(#{1,6}[ \t]+|>[ \t]+|[-+][ \t]+)', multiLine: true), '');
 }
 
-/// What the transcript shows: markdown and vocal cues like "[laughs]" removed
-/// (the cues are for the voice, not the eye).
-String displayText(String raw) => stripMarkdown(raw)
-    .replaceAll(RegExp(r'\s*\[[a-zA-Z][a-zA-Z ]{1,24}\]\s*'), ' ')
+/// Vocal events Gemini TTS performs instead of reading out. Anything else in
+/// brackets would be spoken as words.
+const _ttsEvents = {
+  'laugh', 'chuckle', 'giggle', 'snicker', 'sigh', 'tsk', 'gasp', 'groan', 'yawn',
+  'breath', 'exhales', 'whispers', 'cough', 'pff', 'short pause', 'long pause',
+};
+
+/// Older-style "[laughs]" cues, mapped to the tag TTS understands.
+const _cueAliases = {'laughs': 'laugh', 'chuckles': 'chuckle', 'sighs': 'sigh', 'scoffs': 'pff', 'whisper': 'whispers', 'pause': 'short pause'};
+
+final _cue = RegExp(r'\s*[\[<]([a-zA-Z][a-zA-Z -]{1,24})[\]>]\s*');
+
+/// What the transcript shows: markdown and vocal cues like "`<laugh>`" or
+/// "[laughs]" removed (the cues are for the voice, not the eye).
+String displayText(String raw) =>
+    stripMarkdown(raw).replaceAll(_cue, ' ').replaceAll(RegExp(r' {2,}'), ' ').trimLeft();
+
+/// What TTS gets: markdown removed, cues normalised to its `<event>` tags and
+/// unknown ones dropped, so nothing but the reply itself is read aloud.
+String speechText(String raw) => stripMarkdown(raw)
+    .replaceAllMapped(_cue, (m) {
+      final name = m[1]!.toLowerCase().trim();
+      final event = _cueAliases[name] ?? name;
+      return _ttsEvents.contains(event) ? ' <$event> ' : ' ';
+    })
     .replaceAll(RegExp(r' {2,}'), ' ')
-    .trimLeft();
+    .trim();

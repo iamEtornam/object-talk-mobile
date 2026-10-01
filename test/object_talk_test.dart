@@ -105,6 +105,14 @@ void main() {
     expect(displayText('**I** am _very_ `old`.'), 'I am very old.');
     expect(displayText('[sighs] The couch again? [laughs] Fine.'), 'The couch again? Fine.');
     expect(displayText('See [my maker](https://x.y) now'), 'See my maker now');
+    expect(displayText('<chuckle> Fine. <short pause> Go on.'), 'Fine. Go on.');
+  });
+
+  test('speechText keeps only cues TTS performs, as its tags', () {
+    expect(speechText('[laughs] **Mate**, no.'), '<laugh> Mate, no.');
+    expect(speechText('[scoffs] A car? <sigh> Please.'), '<pff> A car? <sigh> Please.');
+    expect(speechText('[dramatic music] Hi [winks] there'), 'Hi there');
+    expect(speechText('Just words.'), 'Just words.');
   });
 
   group('SentenceSplitter', () {

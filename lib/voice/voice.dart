@@ -49,7 +49,7 @@ class SentenceSplitter {
 /// A synthesized line ready to play, with its loudness envelope.
 class _Clip {
   _Clip(Speech speech)
-      : wav = _wav(speech.pcm, speech.sampleRate),
+      : wav = encodeWav(speech.pcm, speech.sampleRate),
         envelope = loudnessEnvelope(speech.pcm, speech.sampleRate);
   final Uint8List wav;
   final List<double> envelope;
@@ -79,7 +79,7 @@ List<double> loudnessEnvelope(Uint8List pcm, int sampleRate) {
 }
 
 /// Wrap raw PCM in a WAV header so the platform player can decode it.
-Uint8List _wav(Uint8List pcm, int sampleRate) {
+Uint8List encodeWav(Uint8List pcm, int sampleRate) {
   final header = ByteData(44);
   void ascii(int at, String s) {
     for (var i = 0; i < s.length; i++) {
@@ -157,7 +157,7 @@ class Voice implements Speaker {
   @override
   void enqueue(String line) {
     final persona = _persona;
-    final text = stripMarkdown(line).trim();
+    final text = speechText(line);
     if (persona == null || text.isEmpty) return;
     _queue.add(synthesize(text, persona).then<_Clip?>(
       (speech) => compute((Speech s) => _Clip(s), speech),

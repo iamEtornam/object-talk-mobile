@@ -258,7 +258,12 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
             ),
           ),
           if (conversation != null)
-            ConversationPanel(conversation: conversation, speaking: _voice.speaking, topFraction: _hoverBand.$2),
+            ConversationPanel(
+              conversation: conversation,
+              speaking: _voice.speaking,
+              topFraction: _hoverBand.$2,
+              avatar: cutout,
+            ),
         ],
       ),
     );

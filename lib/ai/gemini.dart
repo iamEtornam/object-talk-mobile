@@ -122,15 +122,11 @@ Speech speechFromAudio(Uint8List bytes, String mimeType) {
 // The first (backend, model) pair that produced audio, reused for the session.
 (FirebaseAI, String)? _tts;
 
-/// Speak [text] as [persona] with Gemini TTS. The persona's director's note
-/// steers accent, pace and tone; [laughs]-style cues in [text] are performed.
+/// Speak [text] in [persona]'s voice with Gemini TTS. `<laugh>`-style tags in
+/// [text] are performed rather than read.
 Future<Speech> synthesize(String text, Persona persona) async {
-  final prompt = 'Read the transcript aloud as ${persona.characterName}, a talking '
-      '${persona.identifiedAs}, in a natural, conversational way, like a real person '
-      'talking to a friend, not an announcer.\n'
-      'Voice: ${persona.voiceDirection}.\n'
-      'Transcript:\n$text';
-
+  // Gemini 3.8 TTS speaks its input verbatim and rejects a system instruction,
+  // so the request is the line alone; the cast voice carries the character.
   Future<Speech> run(FirebaseAI ai, String modelName) async {
     final model = ai.generativeModel(
       model: modelName,
@@ -140,7 +136,7 @@ Future<Speech> synthesize(String text, Persona persona) async {
       ),
     );
     final clock = Stopwatch()..start();
-    final response = await model.generateContent([Content.text(prompt)]);
+    final response = await model.generateContent([Content.text(text)]);
     debugPrint('timing tts ($modelName): ${clock.elapsedMilliseconds} ms for ${text.length} chars');
     final audio = response.inlineDataParts.where((p) => p.mimeType.startsWith('audio/')).firstOrNull;
     if (audio == null) throw const PersonaFormatException('TTS returned no audio');
@@ -149,7 +145,7 @@ Future<Speech> synthesize(String text, Persona persona) async {
 
   if (_tts case (final ai, final modelName)) return run(ai, modelName);
 
-  Object? lastError;
+  final errors = <String>[];
   for (final modelName in _ttsModels) {
     for (final ai in [_ai, FirebaseAI.googleAI()]) {
       try {
@@ -160,9 +156,9 @@ Future<Speech> synthesize(String text, Persona persona) async {
       } on FirebaseAIException catch (e) {
         // Model not served on this backend (or not enabled): try the next one.
         debugPrint('TTS $modelName unavailable: ${e.message}');
-        lastError = e;
+        errors.add('$modelName: ${e.message}');
       }
     }
   }
-  throw lastError ?? const PersonaFormatException('No TTS model available');
+  throw StateError('No TTS model worked. ${errors.join(' | ')}');
 }
