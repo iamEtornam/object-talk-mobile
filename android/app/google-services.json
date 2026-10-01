@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "552545997800",
+    "project_id": "object-talk-app",
+    "storage_bucket": "object-talk-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:552545997800:android:71a2bd20f56bced4900a5d",
+        "android_client_info": {
+          "package_name": "dev.etornam.object_talk"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "552545997800-l3nm9m5esflg55hgc6gs5qh703fubqo2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCTlY56567XJX7QBHEh6cA0HV3iCWdzYRk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "552545997800-l3nm9m5esflg55hgc6gs5qh703fubqo2.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "552545997800-9j9mnr122orepc25rc953dm885h896b4.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "dev.etornam.ObjectTalk"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
