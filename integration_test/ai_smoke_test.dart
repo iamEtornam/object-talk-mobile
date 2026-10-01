@@ -1,6 +1,7 @@
 // On-device smoke test of the live AI path: Firebase + App Check + Gemini chat
 // and Gemini TTS, without the camera. Run on a physical device:
 //   flutter test integration_test/ai_smoke_test.dart -d <device-id>
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:firebase_app_check/firebase_app_check.dart';
@@ -49,8 +50,31 @@ Future<(String text, int firstChunkMs, int totalMs)> _ask(PersonaChat chat, Stri
   return (buffer.toString(), first, clock.elapsedMilliseconds);
 }
 
+/// Results also go to a file in the app's tmp dir, so they can be pulled off a
+/// device where profile builds don't surface Flutter's log output:
+///   xcrun devicectl device copy from --domain-type appDataContainer \
+///     --domain-identifier dev.etornam.ObjectTalk --source tmp/smoke_result.txt ...
+final _report = File('${Directory.systemTemp.path}/smoke_result.txt');
+
+void _log(String line) {
+  debugPrint(line);
+  _report.writeAsStringSync('$line\n', mode: FileMode.append, flush: true);
+}
+
+/// Run [body], recording PASS/FAIL for it in the report.
+Future<void> _recorded(String name, Future<void> Function() body) async {
+  try {
+    await body();
+    _log('PASS $name');
+  } catch (e) {
+    _log('FAIL $name: $e');
+    rethrow;
+  }
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  if (_report.existsSync()) _report.deleteSync();
 
   late Persona persona;
   late PersonaChat chat;
@@ -65,9 +89,10 @@ void main() {
     chat = PersonaChat(persona, photo: await _photo(), mimeType: 'image/png');
   });
 
-  testWidgets('chat replies quickly, in character, and refuses an off-topic question', (tester) async {
+  testWidgets('chat replies quickly, in character, and refuses an off-topic question', (tester) =>
+      _recorded('chat', () async {
     final (offTopic, firstMs, totalMs) = await _ask(chat, 'What do you know about cars? Explain how an engine works.');
-    debugPrint('SMOKE off-topic reply (${firstMs}ms to first chunk, ${totalMs}ms total): $offTopic');
+    _log('SMOKE off-topic reply (${firstMs}ms to first chunk, ${totalMs}ms total): $offTopic');
     expect(offTopic.trim(), isNotEmpty);
     expect(firstMs, lessThan(15000), reason: 'first chunk should not stall');
     // It should identify as itself (in whatever words) and decline: "I'm an Air Max, not a motor".
@@ -78,20 +103,21 @@ void main() {
         reason: 'should decline the car question');
 
     final (onTopic, firstMs2, _) = await _ask(chat, 'What are you made of?');
-    debugPrint('SMOKE on-topic reply (${firstMs2}ms to first chunk): $onTopic');
+    _log('SMOKE on-topic reply (${firstMs2}ms to first chunk): $onTopic');
     expect(onTopic.trim(), isNotEmpty);
-  });
+  }));
 
-  testWidgets('Gemini TTS returns playable speech', (tester) async {
+  testWidgets('Gemini TTS returns playable speech', (tester) =>
+      _recorded('tts', () async {
     final clock = Stopwatch()..start();
     final speech = await synthesize('Oi, mind the crease. I am Max.', persona);
     final seconds = speech.pcm.lengthInBytes / 2 / speech.sampleRate;
-    debugPrint('SMOKE tts: ${speech.pcm.lengthInBytes} bytes @ ${speech.sampleRate} Hz '
+    _log('SMOKE tts: ${speech.pcm.lengthInBytes} bytes @ ${speech.sampleRate} Hz '
         '(${seconds.toStringAsFixed(2)} s audio) in ${clock.elapsedMilliseconds}ms');
     expect(speech.sampleRate, inInclusiveRange(8000, 48000));
     expect(seconds, greaterThan(0.5));
     // The envelope that drives the talking motion must be non-trivial.
     final envelope = loudnessEnvelope(speech.pcm, speech.sampleRate);
     expect(envelope.where((v) => v > 0.2), isNotEmpty);
-  });
+  }));
 }
