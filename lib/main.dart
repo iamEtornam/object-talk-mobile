@@ -10,6 +10,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'auth/sign_in_screen.dart';
 import 'camera/camera_screen.dart';
 import 'firebase_options.dart';
+import 'ui/splash.dart';
 import 'ui/theme.dart';
 import 'voice/voice.dart';
 
@@ -44,14 +45,16 @@ class ObjectTalkApp extends StatelessWidget {
       title: 'Object Talk',
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const ColoredBox(color: Palette.ink);
-          }
-          return snapshot.data == null ? const SignInScreen() : const CameraScreen();
-        },
+      home: Splash(
+        child: StreamBuilder<User?>(
+          stream: FirebaseAuth.instance.authStateChanges(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const ColoredBox(color: Palette.ink);
+            }
+            return snapshot.data == null ? const SignInScreen() : const CameraScreen();
+          },
+        ),
       ),
     );
   }

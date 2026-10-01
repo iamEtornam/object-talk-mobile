@@ -27,6 +27,8 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 flutter:
   uses-material-design: true
@@ -34,3 +36,23 @@ flutter:
     - family: Gambarino
       fonts:
         - asset: assets/fonts/Gambarino-Regular.ttf
+
+# Icon and launch screen art are renders of the app's orb: see
+# test/brand_art_test.dart. Regenerate with `dart run flutter_launcher_icons`
+# and `dart run flutter_native_splash:create`.
+flutter_launcher_icons:
+  ios: true
+  android: true
+  image_path: assets/brand/icon.png
+  remove_alpha_ios: true
+  background_color_ios: "#14110F"
+  adaptive_icon_background: "#14110F"
+  adaptive_icon_foreground: assets/brand/icon_foreground.png
+  adaptive_icon_foreground_inset: 0
+
+flutter_native_splash:
+  color: "#14110F"
+  image: assets/brand/splash.png
+  android_12:
+    color: "#14110F"
+    image: assets/brand/splash_android12.png
