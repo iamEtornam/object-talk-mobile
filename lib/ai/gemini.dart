@@ -16,8 +16,9 @@ const _ttsModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini
 FirebaseAI get _ai => FirebaseAI.agentPlatform();
 
 /// Gemini 3 models take a thinking *level*; the 2.x-style `thinkingBudget: 0`
-/// doesn't switch thinking off for them. Minimal keeps replies snappy.
-final _fast = ThinkingConfig.withThinkingLevel(ThinkingLevel.minimal);
+/// doesn't switch thinking off for them. `minimal` is rejected by
+/// gemini-3.8-flash ("Thinking level is unsupported"), so use the lowest it takes.
+final _fast = ThinkingConfig.withThinkingLevel(ThinkingLevel.low);
 
 /// A reply that goes quiet this long is treated as dropped, not left spinning.
 const _replyStall = Duration(seconds: 25);

@@ -70,7 +70,12 @@ void main() {
     debugPrint('SMOKE off-topic reply (${firstMs}ms to first chunk, ${totalMs}ms total): $offTopic');
     expect(offTopic.trim(), isNotEmpty);
     expect(firstMs, lessThan(15000), reason: 'first chunk should not stall');
-    expect(offTopic.toLowerCase(), contains('shoe'), reason: 'should say it is a shoe, not a car');
+    // It should identify as itself (in whatever words) and decline: "I'm an Air Max, not a motor".
+    final lower = offTopic.toLowerCase();
+    expect(['shoe', 'air max', 'sneaker', 'trainer', 'max'].any(lower.contains), isTrue,
+        reason: 'should say what it is');
+    expect(lower, anyOf(contains('not a'), contains("don't know"), contains('no idea')),
+        reason: 'should decline the car question');
 
     final (onTopic, firstMs2, _) = await _ask(chat, 'What are you made of?');
     debugPrint('SMOKE on-topic reply (${firstMs2}ms to first chunk): $onTopic');
