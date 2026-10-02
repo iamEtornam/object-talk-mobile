@@ -122,17 +122,23 @@ void main() {
     final envelope = loudnessEnvelope(speech.pcm, speech.sampleRate);
     expect(envelope.where((v) => v > 0.2), isNotEmpty);
 
-    // Hear it back: a transcript of the audio must be the line and nothing else.
+    // Hear it back: the transcript must be the line and nothing else, and the
+    // voice should carry the persona's accent (London, for Max).
     final heard = (await FirebaseAI.agentPlatform().generativeModel(model: 'gemini-3.8-flash').generateContent([
       Content.multi([
         InlineDataPart('audio/wav', encodeWav(speech.pcm, speech.sampleRate)),
-        TextPart('Transcribe this audio word for word. Output only the words spoken.'),
+        TextPart('Line 1: transcribe this audio word for word, only the words spoken. '
+            "Line 2: the speaker's accent in a few words."),
       ]),
     ])).text!.toLowerCase();
+    _log('SMOKE tts model: $ttsModel');
     _log('SMOKE tts heard: $heard');
-    expect(heard, contains('crease'));
-    for (final leaked in ['perform', 'transcript', 'conversational', 'announcer', 'chuckle', 'voice']) {
-      expect(heard, isNot(contains(leaked)), reason: 'instructions or cue read aloud: "$leaked"');
+    final [spoken, ...accent] = heard.trim().split('\n');
+    expect(spoken, contains('crease'));
+    for (final leaked in ['say this', 'voice', 'london', 'cocky', 'twenties', 'friend', 'casually', 'chuckle']) {
+      expect(spoken, isNot(contains(leaked)), reason: 'direction or cue read aloud: "$leaked"');
     }
+    expect(accent.join(' '), anyOf(contains('british'), contains('london'), contains('english'), contains('cockney')),
+        reason: 'the accent should come through');
   }));
 }

@@ -11,7 +11,18 @@ const _model = 'gemini-3.8-flash';
 
 /// TTS models in order of preference: 3.8 for quality, Lite for speed, and the
 /// 3.1 preview that Firebase AI Logic documents as a last resort.
-const _ttsModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts', 'gemini-3.1-flash-tts-preview'];
+// 3.1 first: it still takes a spoken-style direction, which is what gives each
+// object its accent. 3.8 reads everything verbatim and only offers accents
+// through voice-library ids we can't list without an API key.
+// ponytail: switch to 3.8 + accented voice ids once the Firebase SDK supports them.
+const _ttsModels = ['gemini-3.1-flash-tts-preview', 'gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
+
+/// Whether [model] takes a delivery direction in the text, rather than
+/// reading its whole input aloud (3.8 does the latter).
+bool _takesDirection(String model) => model.startsWith('gemini-3.1');
+
+/// The TTS model in use once one has worked, for logs and the smoke test.
+String? get ttsModel => _tts?.$2;
 
 FirebaseAI get _ai => FirebaseAI.agentPlatform();
 
@@ -122,11 +133,13 @@ Speech speechFromAudio(Uint8List bytes, String mimeType) {
 // The first (backend, model) pair that produced audio, reused for the session.
 (FirebaseAI, String)? _tts;
 
-/// Speak [text] in [persona]'s voice with Gemini TTS. `<laugh>`-style tags in
-/// [text] are performed rather than read.
+/// Speak [text] in [persona]'s voice and accent with Gemini TTS. `<laugh>`-style
+/// tags in [text] are performed rather than read.
 Future<Speech> synthesize(String text, Persona persona) async {
-  // Gemini 3.8 TTS speaks its input verbatim and rejects a system instruction,
-  // so the request is the line alone; the cast voice carries the character.
+  // A short lead-in the model treats as direction, not as words to say.
+  final directed = 'Say this as ${persona.characterName}, in a ${persona.voiceDirection} voice, '
+      'casually, like talking to a friend:\n$text';
+
   Future<Speech> run(FirebaseAI ai, String modelName) async {
     final model = ai.generativeModel(
       model: modelName,
@@ -136,7 +149,7 @@ Future<Speech> synthesize(String text, Persona persona) async {
       ),
     );
     final clock = Stopwatch()..start();
-    final response = await model.generateContent([Content.text(text)]);
+    final response = await model.generateContent([Content.text(_takesDirection(modelName) ? directed : text)]);
     debugPrint('timing tts ($modelName): ${clock.elapsedMilliseconds} ms for ${text.length} chars');
     final audio = response.inlineDataParts.where((p) => p.mimeType.startsWith('audio/')).firstOrNull;
     if (audio == null) throw const PersonaFormatException('TTS returned no audio');
