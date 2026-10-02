@@ -1,5 +1,6 @@
 import CoreImage
 import Flutter
+import GoogleSignIn
 import UIKit
 import Vision
 
@@ -9,7 +10,29 @@ import Vision
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    configureSignInAppCheck()
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  /// App Check is enforced on Google Sign-In (oauth2.googleapis.com), and
+  /// GoogleSignIn only attaches a token once configured; the Flutter plugin
+  /// never does that. Mirrors main.dart: the debug provider (same on-device
+  /// token as Firebase's) for debug and profile builds, App Attest in release.
+  private func configureSignInAppCheck() {
+    let log: (Error?) -> Void = { error in
+      if let error { NSLog("[ObjectTalk] Google Sign-In App Check setup failed: \(error)") }
+    }
+    #if DEBUG || PROFILE
+      guard let path = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist"),
+        let apiKey = NSDictionary(contentsOfFile: path)?["API_KEY"] as? String
+      else {
+        NSLog("[ObjectTalk] No API_KEY in GoogleService-Info.plist; Google Sign-In will be blocked by App Check.")
+        return
+      }
+      GIDSignIn.sharedInstance.configureDebugProvider(withAPIKey: apiKey, completion: log)
+    #else
+      GIDSignIn.sharedInstance.configure(completion: log)
+    #endif
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
