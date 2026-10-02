@@ -50,12 +50,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
-        <!-- speech_to_text / flutter_tts need to see the system engines. -->
+        <!-- speech_to_text needs to see the system speech recogniser. -->
         <intent>
             <action android:name="android.speech.RecognitionService" />
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
     </queries>
 </manifest>

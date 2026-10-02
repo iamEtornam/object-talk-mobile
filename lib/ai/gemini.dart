@@ -9,11 +9,10 @@ import 'persona.dart';
 /// ships in the app and there is no custom backend.
 const _model = 'gemini-3.8-flash';
 
-/// TTS models in order of preference: 3.8 for quality, Lite for speed, and the
-/// 3.1 preview that Firebase AI Logic documents as a last resort.
-// 3.1 first: it still takes a spoken-style direction, which is what gives each
-// object its accent. 3.8 reads everything verbatim and only offers accents
-// through voice-library ids we can't list without an API key.
+/// TTS models in order of preference. 3.1 first: it still takes a spoken-style
+/// direction, which is what gives each object its accent. 3.8 reads everything
+/// verbatim and only offers accents through voice-library ids, which can't be
+/// listed without an API key; it stays as the fallback.
 // ponytail: switch to 3.8 + accented voice ids once the Firebase SDK supports them.
 const _ttsModels = ['gemini-3.1-flash-tts-preview', 'gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
 

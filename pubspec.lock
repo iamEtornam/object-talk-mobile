@@ -20,9 +20,11 @@ packages:
   ar_flutter_plugin_2:
     dependency: "direct main"
     description:
-      path: "../ar_flutter_plugin"
-      relative: true
-    source: path
+      path: "."
+      ref: "3839410d9db3125fdf6133e80355f84b04650015"
+      resolved-ref: "3839410d9db3125fdf6133e80355f84b04650015"
+      url: "https://github.com/iamEtornam/ar_flutter_plugin"
+    source: git
     version: "0.0.3"
   archive:
     dependency: transitive
