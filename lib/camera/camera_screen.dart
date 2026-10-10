@@ -10,6 +10,7 @@ import 'package:ar_flutter_plugin_2/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_2/managers/ar_session_manager.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_thinking_orbs/flutter_thinking_orbs.dart';
@@ -60,13 +61,20 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     WidgetsBinding.instance.removeObserver(this);
     _conversation?.dispose();
     _voice.dispose();
-    _session?.dispose();
+    _releaseSession(_session);
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) _voice.stop();
+  }
+
+  /// On Android, removing the ARView already runs the plugin's native dispose;
+  /// calling it as well destroys Filament's engine twice and segfaults.
+  Future<void> _releaseSession(ARSessionManager? session) async {
+    if (session == null || defaultTargetPlatform == TargetPlatform.android) return;
+    await session.dispose();
   }
 
   void _onARViewCreated(
@@ -99,7 +107,7 @@ class _CameraScreenState extends State<CameraScreen> with WidgetsBindingObserver
     // Freeze on the captured frame and shut the camera off: everything from
     // here works on the still, so there is no reason to keep ARKit running.
     _session = null;
-    await session.dispose();
+    await _releaseSession(session);
     setState(() {
       _frame = full;
       _phase = _Phase.identifying;
